@@ -1,0 +1,37 @@
+Seed used for python random, numpy and torch is 1234
+This is a case with quarantine logic
+This is a case without den logic
+************************************************************
+This is time 0
+There are 0 agents awaiting test results today
+There are 0 positive candidates for test results today
+There are 0 negative candidates for test results today
+There are 0 agents who have received DEN today
+Of these agents only 0 will comply with DEN today
+There are 0 agents who have mild or sever symptoms today
+There are finally 0 agents who are supposed to take tests today
+Of the agents who are supposed to take tests only 0 agents will take tests today as others are awaiting test results
+There are 0 agents whose quarantine ends today
+All of the 0 positively tested agents begin a 14 day quarantine
+At this point, before dropping off, 0.0 agents are in quarantine
+Of the 0 POC positively tested agents, 0 agents begin a 14 day quarantine
+At this point, before dropping off, 0.0 agents are in quarantine including 0 agents from POC test
+0 agents are breaking quarantine today
+At this point, after dropping off, 0.0 agents are in quarantine
+Using vaccination logic now at time 0
+Vaccine available today is 0 units
+100000 agents are eligible for vaccine today
+More vaccine than agents is False
+0 agents are receiving vaccine today
+0 agents are getting first dose today
+0 agents are getting second dose today
+agents vaccine status over days 0
+As of today 100000 agents are yet to be vaccinated
+As of today 0 agents have received just one dose of vaccine
+As of today 0 agents have received two doses of vaccine
+Vaccine available prior to today's vaccination is 0 units
+Vaccine available after today's vaccination is 0 units
+torch.Size([1578652]) torch.Size([1578652]) torch.Size([1578652]) torch.Size([1578652]) torch.Size([1578652])
+> /home/alex/Insync/acastillo41@gatech.edu/OneDrive/Research/Projects/Sim/deepabm-covid/model.py(722)step()
+-> index_array = torch.arange(num_channels).repeat(x.shape[0], 1)
+(Pdb) 
