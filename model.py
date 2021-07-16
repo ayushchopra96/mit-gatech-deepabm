@@ -33,12 +33,19 @@ def lam(x_i, x_j, edge_attr, t, R, SFSusceptibility, SFInfector, lam_gamma_integ
         return res.view(-1, 1)
 
 class InfectionNetwork(MessagePassing):
-    def __init__(self, lam, R, SFSusceptibility, SFInfector, lam_gamma_integrals):
+    def __init__(self, lam, R, SFSusceptibility, SFInfector, lam_gamma_integrals, trainable_params):
         super(InfectionNetwork, self).__init__(aggr='add')
         self.lam = lam
-        self.R = torch.nn.Parameter(torch.tensor(R))
-        self.SFSusceptibility = torch.nn.Parameter(SFSusceptibility)
-        self.SFInfector = torch.nn.Parameter(SFInfector)
+        if trainable_params:
+            # pdb.set_trace()
+            t_params = [procinfo for procinfo in trainable_params]
+            self.R = torch.nn.Parameter(t_params[0])
+            self.SFSusceptibility = torch.nn.Parameter(t_params[1])
+            self.SFInfector = torch.nn.Parameter(t_params[2])
+        else:
+            self.R = torch.nn.Parameter(torch.tensor(R))
+            self.SFSusceptibility = torch.nn.Parameter(SFSusceptibility)
+            self.SFInfector = torch.nn.Parameter(SFInfector)
         # pdb.set_trace()
         self.lam_gamma_integrals = lam_gamma_integrals
 
@@ -62,7 +69,7 @@ class InfectionNetwork(MessagePassing):
         return tmp
 
 class TorchABMCovid():
-    def __init__(self, params, device):
+    def __init__(self, params, trainable_params, device):
         self.params = params
         self.device = device
         #**********************************************************************************
@@ -161,7 +168,7 @@ class TorchABMCovid():
         self.lam_gamma['sigma'] = 2.14
         self.lam_gamma_integrals = self._get_lam_gamma_integrals(**self.lam_gamma, t = self.params['num_steps'])
         self.net = InfectionNetwork(lam, self.R, self.SFSusceptibility, 
-                                    self.SFInfector, self.lam_gamma_integrals).to(self.device) #Initializing message passing network (currently no trainable parameters here)
+                                    self.SFInfector, self.lam_gamma_integrals, trainable_params).to(self.device) #Initializing message passing network (currently no trainable parameters here)
         #**********************************************************************************
         #Dynamic
         self.den_contacts = deque([], self.params['max_den_contact_days'])
@@ -269,7 +276,6 @@ class TorchABMCovid():
         self._set_next_stages_times(self.agents_infected_index[0,:], self.agents_stages[0, :], 0)
         #**********************************************************************************
         self.current_time = 0
-
 
     def step(self):
         t = self.current_time

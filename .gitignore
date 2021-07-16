@@ -1,4 +1,6 @@
 ./logs/*
+./Data/ResultsNew/*
+./Data/Results/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

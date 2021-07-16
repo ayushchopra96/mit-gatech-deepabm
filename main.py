@@ -76,7 +76,6 @@ with open(outfile, 'w') as stream:
     except yaml.YAMLError as exc:
         print(exc)
 for n in range(params['num_runs']):
-    abm = model.TorchABMCovid(params, device)
 
     # for i in range(params['num_steps']):
     #     abm.step()
@@ -95,20 +94,31 @@ for n in range(params['num_runs']):
     # import pdb
     # pdb.set_trace()
 
-    opt = torch.optim.Adam(filter(lambda p: p.requires_grad, abm.net.parameters()))
-    loss = torch.nn.MSELoss()
-    for epoch in range(100):
+    import pdb
+    loss_fcn = torch.nn.MSELoss()
+    trainable_params = None
+    f = open('params.txt', 'a+') 
+    for epoch in range(4):
+        abm = model.TorchABMCovid(params, trainable_params, device)
+        opt = torch.optim.Adam(filter(lambda p: p.requires_grad, abm.net.parameters()))
         opt.zero_grad()
         for i in range(params['num_steps']):
             abm.step()
         results = abm.collect_results_trainable()
-        import pdb
-        loss = loss(gt_new_infected.float(),results['new_infected'])# +\
-        pdb.set_trace()
+        loss = 10000*loss_fcn(gt_new_infected.float(),results['new_infected'])# +\
             # loss(gt_new_hosp,results['new_hosp']) +\
             # loss(gt_new_death,results['new_death'])
         loss.backward()
-    
-
+        opt.step()
+        trainable_params = abm.net.parameters()
+        # trainable_params_print = trainable_params.copy()
+        # trainable_params_print = list(trainable_params)
+        f.write('\n\n============')
+        for name, param in abm.net.named_parameters():
+            if param.requires_grad:
+                f.write('\n'+name+str(param.data))
+        f.write('\nloss'+str(loss))
+        # f.write(str([procinfo for procinfo in trainable_params_print]))
+    f.close()
     print(" ENDED RUN {}".format(n))
     print("-"*60)
