@@ -102,9 +102,11 @@ for n in range(params['num_runs']):
         for i in range(params['num_steps']):
             abm.step()
         results = abm.collect_results_trainable()
-        loss = loss(gt_new_infected,results['new_infected']) +\
-            loss(gt_new_hosp,results['new_hosp']) +\
-            loss(gt_new_death,results['new_death'])
+        import pdb
+        loss = loss(gt_new_infected.float(),results['new_infected'])# +\
+        pdb.set_trace()
+            # loss(gt_new_hosp,results['new_hosp']) +\
+            # loss(gt_new_death,results['new_death'])
         loss.backward()
     
 

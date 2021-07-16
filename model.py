@@ -203,6 +203,8 @@ class TorchABMCovid():
         #c.Infection and Disease
         self.agents_stages = torch.stack([torch.tensor(agents_df['stage'].to_numpy()).long()] + 
                 [-1*torch.ones_like(torch.tensor(agents_df['stage'].to_numpy()))]*(params['num_steps'])).to(self.device) #Initialized for num_steps + 1
+        # self.agents_stages = torch.nn.Parameter(self.agents_stages)
+        # pdb.set_trace()
         self.agents_infected_index = (self.agents_stages > 0).to(self.device) #Not susceptible
         self.agents_infected_time = ((self.params['num_steps']+1)*torch.ones_like(self.agents_stages)).to(self.device) #Practically infinite as np.inf gives wrong data type
         self.agents_infected_time[0, self.agents_infected_index[0].bool()] = 0
@@ -219,6 +221,8 @@ class TorchABMCovid():
 
         self.agents_vaccination_effectiveness = torch.zeros(self.params['num_steps'] + 1,
                                                             self.params['num_agents']).long().to(self.device)
+
+        self.infected_now_array = []                                                    
         #**********************************************************************************
         #Household network creation
         #Forward and backward edges need to be added as by default the message passing network is directional
@@ -683,53 +687,43 @@ class TorchABMCovid():
         p = torch.hstack((prob_not_infected, 1-prob_not_infected))
         # potentially_infected_now = torch.distributions.Categorical(probs=p).sample()
         
+        class LogitRelaxedBernoulli(object):
+            def __init__(self, logits, temperature=0.3, **kwargs):
+                self.logits = logits
+                self.temperature = temperature
 
-        """
-            threshold, gradient doesn't work
-        """
-        potentially_infected_now = (1-prob_not_infected.view(-1))>=0.5  # threshold 
+            def rsample(self):
+                eps = torch.clamp(
+                    torch.rand(
+                        self.logits.size(), dtype=self.logits.dtype, device=self.logits.device
+                    ),
+                    min=1e-6,
+                    max=1 - 1e-6,
+                )
+                y = (self.logits + torch.log(eps) - torch.log(1.0 - eps)) / self.temperature
+                return y
 
-        """
-            Gumbel-Max trick
-        """
-        # def gumbel_softmax(logits, dim=-1, temperature=0.1, eps=1e-9):
-        #     # get gumbel noise
-        #     noise = torch.rand(logits.size(), dtype=logits.dtype, device=logits.device)
-        #     noise = -1.0 * torch.log(noise + eps)
-        #     noise = -1.0 * torch.log(noise + eps)
+            def log_prob(self, value):
+                return (
+                    math.log(self.temperature)
+                    - self.temperature * value
+                    + self.logits
+                    - 2 * F.softplus(-self.temperature * value + self.logits)
+                )
 
-        #     x = (logits + noise) / temperature
-        #     x = torch.softmax(x, dim=dim)
-        #     return x
+        logits = torch.log(lam_t+1e-9)  # sum small number in case we have 0
+        prob_infected = LogitRelaxedBernoulli(logits=logits)
+        potentially_infected_now = torch.sigmoid(prob_infected.rsample())
 
-        def custom_sigmoid(self, x, offset):
-            temp = 1/30
-            exponent = (x - offset) / temp
-            #print(exponent)
-            #answer = (1 / (1 + torch.exp( - exponent / self.temp)))
-            answer = nn.Sigmoid()(exponent)
-            #print(answer)
-            return answer
+        # infected_now_pre_vaccine = torch.logical_and(potentially_infected_now.bool(), torch.logical_not(self.agents_infected_index[t].bool()))
+        # infected_now = torch.logical_and(infected_now_pre_vaccine.bool(), torch.logical_not(self.agents_vaccination_effectiveness[t, :].bool())).view(-1)
         
-        # threshold_score = 0.5
-        # fmap_score = custom_sigmoid(1-prob_not_infected, threshold_score)
-        # pruning_vector = fmap_score.unsqueeze(dim=2).unsqueeze(dim=3)
-        # x = x * pruning_vector
-        fmap_score = 1-prob_not_infected
-        num_channels = prob_not_infected.shape[0]
-
-        pdb.set_trace()
-        index_array = torch.arange(num_channels).unsqueeze(1) #.repeat(x.shape[0], 1)
-        # indices = index_array[fmap_score < 0.5]
-        idx = index_array[fmap_score >= 0.5]
-        potentially_infected_now = potentially_infected_now
-        
-        potentially_infected_now = gumbel_softmax(prob_not_infected,temperature=0.8)
-        potentially_infected_now = gumbel_softmax(-(lam_t+.00001))
-
-        infected_now_pre_vaccine = torch.logical_and(potentially_infected_now.bool(), torch.logical_not(self.agents_infected_index[t].bool()))
-
-        infected_now = torch.logical_and(infected_now_pre_vaccine.bool(), torch.logical_not(self.agents_vaccination_effectiveness[t, :].bool())).view(-1)
+        # convert from boolean to arithmetic operations
+        infected_now_pre_vaccine = potentially_infected_now * (1-self.agents_infected_index[t].float()).unsqueeze(1)
+        infected_now = (infected_now_pre_vaccine * (1-self.agents_vaccination_effectiveness[t,:].float()).unsqueeze(1)).view(-1)
+        self.infected_now_array.append(infected_now.sum())
+        # pdb.set_trace()
+        # infected_now = infected_now_grad.clone()
 
         if self.params['debug']:
             print('Infected now before vaccination: ', infected_now_pre_vaccine.sum())
@@ -742,6 +736,7 @@ class TorchABMCovid():
         # agents_stages_onehot.scatter_(1, agents_stages[t, infected_now.bool()].view(-1,1).long(), 1)
         agents_stages_onehot = make_one_hot(self.agents_stages[t, infected_now.bool()], self.params['num_stages'])
         probs = torch.bmm(disease_probs_agents.permute(0, 2, 1).float(), agents_stages_onehot.float().unsqueeze(2)).squeeze() # torch.bmm(f.permute(0, 2, 1),e.unsqueeze(2)).squeeze()
+        # self.agents_stages[t+1,infected_now.bool()] = torch.distributions.Categorical(probs=probs).sample()
         self.agents_stages[t+1,infected_now.bool()] = torch.distributions.Categorical(probs=probs).sample()
         self.agents_infected_index[t+1, infected_now.bool()] = True
         self.agents_infected_time[t+1, infected_now.bool()] = t
@@ -844,6 +839,8 @@ class TorchABMCovid():
         active = total_infected - plot_data[:,10] - plot_data[:,8] # - recov - death 
         # calculating new intances
         new_infected = torch.diff(total_infected,prepend=total_infected[0:1])
+    
+        new_infected = torch.stack(self.infected_now_array)
         total_hosp = plot_data[:,6]
         new_hosp = torch.diff(total_hosp,prepend=total_hosp[0:1])
         total_death = plot_data[:,8]
